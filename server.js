@@ -15,11 +15,8 @@ app.use((req, res, next) => {
 });
 
 const pool = new Pool({
-    user: process.env.DB_USER || 'alain',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'bank_db',
-    password: process.env.DB_PASSWORD || 'kazama',
-    port: process.env.DB_PORT || 5432,
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
 app.get('/', (req, res) => {
