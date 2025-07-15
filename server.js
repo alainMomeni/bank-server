@@ -48,8 +48,9 @@ app.post('/api/gab-notifications', async (req, res) => {
                 transaction_narration,
                 transaction_reference,
                 transaction_drcr_indicator,
-                hash_val
-            ) VALUES ($1, $2, TO_TIMESTAMP($3, 'YYYYMMDDHH24MISS'), $4, $5, $6, $7, $8)
+                hash_val,
+                status
+            ) VALUES ($1, $2, TO_TIMESTAMP($3, 'YYYYMMDDHH24MISS'), $4, $5, $6, $7, $8, 'pending')
             RETURNING id;
         `;
         
@@ -67,24 +68,21 @@ app.post('/api/gab-notifications', async (req, res) => {
         const result = await pool.query(insertQuery, values);
         console.log(`Notification enregistrée avec l'ID: ${result.rows[0].id}`);
         
-        // MODIFIÉ: Réponse en cas de succès
         res.status(200).json({ Result: "Success" });
         
     } catch (err) {
         console.error("Erreur lors de l'enregistrement:", err);
         
-        // MODIFIÉ: Réponse en cas de doublon
         if (err.code === '23505') {
             console.log(`Transaction en doublon: ${TransactionReference}`);
             return res.status(200).json({ Result: "Repeat" });
         }
         
-        // MODIFIÉ: Réponse en cas d'échec
         res.status(500).json({ Result: "Failure" });
     }
 });
 
-// Route pour récupérer toutes les notifications
+// Route pour récupérer toutes les notifications (avec le statut)
 app.get('/api/gab-notifications', async (req, res) => {
     try {
         const query = `
@@ -96,7 +94,8 @@ app.get('/api/gab-notifications', async (req, res) => {
                 transaction_narration,
                 transaction_reference,
                 transaction_drcr_indicator,
-                received_at
+                received_at,
+                status
             FROM gab_notifications
             ORDER BY transaction_date DESC, received_at DESC
         `;
@@ -109,6 +108,38 @@ app.get('/api/gab-notifications', async (req, res) => {
         res.status(500).json({ error: 'Erreur serveur' });
     }
 });
+
+// Route pour mettre à jour le statut d'une notification
+app.patch('/api/gab-notifications/:id', async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status || !['pending', 'processed'].includes(status)) {
+        return res.status(400).json({ error: "Statut invalide. Le statut doit être 'pending' ou 'processed'." });
+    }
+
+    try {
+        const updateQuery = `
+            UPDATE gab_notifications
+            SET status = $1
+            WHERE id = $2
+            RETURNING *;
+        `;
+        const result = await pool.query(updateQuery, [status, id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Notification non trouvée.' });
+        }
+        
+        console.log(`Statut de la notification ${id} mis à jour à '${status}'`);
+        res.status(200).json(result.rows[0]);
+
+    } catch(err) {
+        console.error('Erreur lors de la mise à jour:', err);
+        res.status(500).json({ error: 'Erreur serveur' });
+    }
+});
+
 
 app.listen(port, () => {
     console.log(`Serveur démarré sur http://localhost:${port}`);
